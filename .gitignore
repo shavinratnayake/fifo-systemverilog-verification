@@ -1,0 +1,15 @@
+# Verilator build output
+obj_dir/
+
+# Coverage output
+coverage.dat
+coverage_annotated/
+
+# Waveform files
+*.vcd
+*.fst
+
+# Temporary/editor files
+*.log
+*~
+.vscode/
