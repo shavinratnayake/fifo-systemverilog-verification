@@ -23,9 +23,8 @@ The synchronous FIFO supports:
 The testbench uses a class-based SystemVerilog environment with a generator, driver, monitor, and scoreboard.
 
 ```text
-Generator ──► Driver ──► DUT ──► Monitor ──► Scoreboard
-                                                  │
-                                            Reference Model
+Generator -> Driver -> DUT -> Monitor -> Scoreboard
+                                            
 ```
 
 The generator produces constrained-random read and write operations. The driver applies the generated transactions to the FIFO through a SystemVerilog interface.
