@@ -1,158 +1,66 @@
-# Synchronous FIFO Verification
+# Synchronous FIFO Verification — SystemVerilog/UVM
 
-SystemVerilog implementation and verification of a parameterized synchronous FIFO.
+A SystemVerilog UVM verification environment for an 8-bit, 16-entry synchronous FIFO.
 
-I built a class-based verification environment to test FIFO behavior using constrained-random stimulus, a reference-model scoreboard, SystemVerilog Assertions (SVA), and functional coverage.
+## Verification Architecture
 
-During verification, the constrained-random regression exposed an RTL bug in the FIFO count logic. The scoreboard detected the resulting `empty` status mismatch, which was traced back to an incorrect count update during read-only operations.
+- UVM transaction, sequences, and sequencer
+- UVM driver and monitor
+- UVM agent and environment
+- Self-checking reference-model scoreboard
+- Functional coverage collector
+- Five SystemVerilog Assertions (SVA)
 
-## Design
+## Verification Scenarios
 
-The synchronous FIFO supports:
-
-- Parameterized data width and depth
-- Independent read and write control
-- `full` and `empty` status flags
-- Simultaneous read and write operations
-- Overflow and underflow protection
-- Read and write pointer wraparound
-- Synchronous FIFO count tracking
-
-## Verification Environment
-
-The testbench uses a class-based SystemVerilog environment with a generator, driver, monitor, and scoreboard.
-
-```text
-Generator -> Driver -> DUT -> Monitor -> Scoreboard
-                                            
-```
-
-The generator produces constrained-random read and write operations. The driver applies the generated transactions to the FIFO through a SystemVerilog interface.
-
-The monitor observes FIFO activity and sends transactions to the scoreboard. The scoreboard maintains an independent reference queue and compares the expected FIFO behavior against the DUT.
-
-## Assertions
-
-SVA properties check:
-
-- Reset clears the FIFO
-- `full` and `empty` are never asserted simultaneously
-- Reading while empty does not advance the read pointer
-- Writing while full does not advance the write pointer
-- Accepted writes advance the write pointer
-- Accepted reads advance the read pointer
-- Write-only operations increment the FIFO count
-- Read-only operations decrement the FIFO count
-- Simultaneous reads and writes keep the count unchanged
-- FIFO count remains within valid bounds
-
-Additional cover properties verify that both the read and write pointers wrap around during the regression.
-
-## Functional Coverage
-
-Functional coverage tracks:
-
-- Idle cycles
-- Read operations
-- Write operations
+- FIFO fill and drain
+- Overflow and underflow attempts
 - Simultaneous read/write operations
-- Empty and non-empty states
-- Full and non-full states
-- Underflow attempts
-- Overflow attempts
-- Operation × empty-state combinations
-- Operation × full-state combinations
+- Back-to-back transactions
+- FIFO full and empty flag checking
+- Read-data ordering and integrity
+- Read/write pointer wraparound
 
-Final functional coverage:
+## Latest Simulation Results
 
-```text
-covergroup : 100.0% (26/26)
-user       : 100.0% (2/2)
-```
+| Metric | Result |
+|---|---|
+| Scoreboard checks passed | 171 |
+| Scoreboard failures | 0 |
+| Functional coverage | 85.71% |
+| Accepted writes | 37 |
+| Accepted reads | 36 |
+| Simultaneous read/write requests | 20 |
+| Back-to-back active-cycle pairs | 54 |
+| SVA properties | 5 |
+| Reported assertion violations | 0 |
 
-The two user coverage targets correspond to read-pointer and write-pointer wraparound.
-
-## Verification Results
-
-The final constrained-random regression completed with zero scoreboard failures:
-
-```text
-FIFO VERIFICATION TEST SUMMARY
-Passed checks : 4479
-Failed checks : 0
-RESULT        : PASS
-```
-
-Final coverage included:
-
-```text
-Toggle coverage     : 99.5% (370/372)
-Functional coverage : 100.0% (26/26)
-Pointer wrap targets: 100.0% (2/2)
-```
-
-## Bug Found During Verification
-
-Constrained-random testing exposed an error in the FIFO's read-only count update.
-
-The incorrect RTL incremented the FIFO count during a read-only operation:
-
-```systemverilog
-2'b01: count <= count + 1'b1;
-```
-
-The scoreboard detected an `empty` status mismatch caused by the incorrect count. Debugging the failure isolated the issue to the count update logic, which was corrected to:
-
-```systemverilog
-2'b01: count <= count - 1'b1;
-```
-
-The full regression was rerun after the fix and completed with zero failures.
-
-## Project Structure
-
-```text
-├── rtl/
-│   └── sync_fifo.sv
-└── tb/
-    ├── fifo_driver.sv
-    ├── fifo_generator.sv
-    ├── fifo_if.sv
-    ├── fifo_monitor.sv
-    ├── fifo_scoreboard.sv
-    ├── fifo_tb.sv
-    └── fifo_transaction.sv
-```
-
-## Running with Verilator
-
-Compile:
-
-```bash
-verilator --binary --coverage --assert -Wall -Wno-fatal \
-  rtl/sync_fifo.sv \
-  tb/fifo_if.sv \
-  tb/fifo_transaction.sv \
-  tb/fifo_generator.sv \
-  tb/fifo_driver.sv \
-  tb/fifo_monitor.sv \
-  tb/fifo_scoreboard.sv \
-  tb/fifo_tb.sv \
-  --top-module fifo_tb
-```
-
-Run the regression:
-
-```bash
-./obj_dir/Vfifo_tb
-```
-
-View the coverage summary:
-
-```bash
-verilator_coverage --report summary coverage.dat
-```
+Results are from the directed UVM simulation. Functional coverage reflects the currently defined coverage model, not exhaustive verification.
 
 ## Tools
 
-SystemVerilog, SVA, constrained-random verification, functional coverage, Verilator, Git, Linux/WSL
+- SystemVerilog
+- Accellera UVM 2020.3.1
+- Verilator 5.051 development build
+- Ubuntu Linux / WSL
+
+## Build and Run
+
+The project requires Verilator with UVM support and an installed Accellera UVM library.
+
+```bash
+export UVM_HOME="$HOME/uvm-core"
+
+verilator --binary --timing --assert --coverage -Wno-fatal -j 4 \
+  +define+UVM_NO_DPI \
+  +incdir+$UVM_HOME/src \
+  +incdir+tb \
+  $UVM_HOME/src/uvm_pkg.sv \
+  tb/fifo_if.sv \
+  tb/fifo_uvm_pkg.sv \
+  rtl/sync_fifo.sv \
+  tb/fifo_assertions.sv \
+  tb/fifo_tb_top.sv \
+  --top-module fifo_tb_top
+
+./obj_dir/Vfifo_tb_top

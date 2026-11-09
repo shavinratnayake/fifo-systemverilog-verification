@@ -1,77 +1,46 @@
-class fifo_monitor #(
-    parameter int DATA_WIDTH = 8
-    );
+class fifo_monitor extends uvm_monitor;
 
-    mailbox #(fifo_transaction #(DATA_WIDTH)) mon2scb;
+    `uvm_component_utils(fifo_monitor)
 
-    virtual fifo_if #(DATA_WIDTH).MONITOR vif;
+    virtual fifo_if vif;
 
-    covergroup fifo_cg;
+    uvm_analysis_port #(fifo_transaction) ap;
 
-        operation_cp: coverpoint {vif.mon_cb.wr_en, vif.mon_cb.rd_en} {
-            bins idle   = {2'b00};
-            bins read   = {2'b01};
-            bins write  = {2'b10};
-            bins read_write = {2'b11};
-        }
-
-        empty_cp: coverpoint vif.mon_cb.empty {
-            bins not_empty  = {1'b0};
-            bins empty  = {1'b1};
-        }
-
-        full_cp: coverpoint vif.mon_cb.full {
-            bins not_full   = {1'b0};
-            bins full   = {1'b1};
-        }
-
-        underflow_cp: coverpoint (vif.mon_cb.rd_en && vif.mon_cb.empty){
-            bins underflow_attempt  = {1'b1};
-        }
-
-        overflow_cp: coverpoint (vif.mon_cb.wr_en && vif.mon_cb.full){
-            bins overflow_attempt   = {1'b1};
-        }
-
-        operation_empty_cross: cross operation_cp, empty_cp;
-
-        operation_full_cross: cross operation_cp, full_cp;
-
-    endgroup
-
-    function new(
-        mailbox #(fifo_transaction #(DATA_WIDTH)) mon2scb_in,
-        virtual fifo_if #(DATA_WIDTH).MONITOR vif_in
-    );
-
-        this.mon2scb = mon2scb_in;
-        this.vif = vif_in;
-
-        fifo_cg = new();
+    function new(string name = "fifo_monitor",
+                 uvm_component parent = null);
+        super.new(name, parent);
     endfunction
 
-    task run();
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
 
-        fifo_transaction #(DATA_WIDTH) trans;
+        ap = new("ap", this);
+
+        if (!uvm_config_db#(virtual fifo_if)::get(
+                this, "", "vif", vif))
+            `uvm_fatal("NO_VIF", "Virtual interface not found")
+    endfunction
+
+    task run_phase(uvm_phase phase);
+
+        fifo_transaction tx;
 
         forever begin
 
             @(vif.mon_cb);
 
-            trans = new();
+            tx = fifo_transaction::type_id::create("tx");
 
-            trans.wr_en = vif.mon_cb.wr_en;
-            trans.rd_en = vif.mon_cb.rd_en;
-            trans.data = vif.mon_cb.wr_data;
+            tx.rst_n   = vif.mon_cb.rst_n;
+            tx.wr_en   = vif.mon_cb.wr_en;
+            tx.wr_data = vif.mon_cb.wr_data;
+            tx.rd_en   = vif.mon_cb.rd_en;
 
-            trans.rst_n = vif.mon_cb.rst_n;
-            trans.rd_data = vif.mon_cb.rd_data;
-            trans.full = vif.mon_cb.full;
-            trans.empty = vif.mon_cb.empty;
+            tx.rd_data = vif.mon_cb.rd_data;
+            tx.full    = vif.mon_cb.full;
+            tx.empty   = vif.mon_cb.empty;
 
-            fifo_cg.sample();
-
-            mon2scb.put(trans);
+            ap.write(tx);
 
         end
 

@@ -1,15 +1,18 @@
-# Verilator build output
+# Verilator build outputs
 obj_dir/
-
-# Coverage output
-coverage.dat
-coverage_annotated/
-
-# Waveform files
 *.vcd
 *.fst
 
-# Temporary/editor files
+# Generated coverage files
+coverage.dat
+coverage_report/
+coverage_annotated/
+
+# Simulation outputs
 *.log
-*~
+*.wlf
+
+# Editor and operating system files
 .vscode/
+.DS_Store
+Thumbs.db

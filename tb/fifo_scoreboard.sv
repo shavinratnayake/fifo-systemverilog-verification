@@ -1,141 +1,168 @@
-class fifo_scoreboard #(
-    parameter int DATA_WIDTH = 8,
-    parameter int DEPTH = 16
-);
-    // Mailbox from monitor to scoreboard
-    mailbox #(fifo_transaction #(DATA_WIDTH)) mon2scb;
+class fifo_scoreboard extends uvm_scoreboard;
 
-    // Reference model of FIFO
-    logic [DATA_WIDTH-1:0] reference_queue[$];
+    `uvm_component_utils(fifo_scoreboard)
 
-    // Expected data from an accepted read
-    logic [DATA_WIDTH-1:0] expected_rd_data;
+    uvm_analysis_imp #(fifo_transaction, fifo_scoreboard) analysis_export;
 
-    // Indicates that a read result needs to be checked.
-    logic read_pending;
+    bit [7:0] expected_queue[$];
+    bit [7:0] expected_rd_data = '0;
+    bit rd_data_valid = 0;
 
-    // Test result counters
-    int passed;
-    int failed;
+    int tests_passed = 0;
+    int tests_failed = 0;
+    bit reset_seen = 0;
 
-    function new (
-        mailbox #(fifo_transaction #(DATA_WIDTH)) mon2scb_in
-    );
+    int write_count = 0;
+    int read_count = 0;
+    int simultaneous_count = 0;
+    int full_count = 0;
+    int empty_count = 0;
 
-        this.mon2scb = mon2scb_in;
-
-        passed = 0;
-        failed = 0;
-        read_pending = 1'b0;
-
+    function new(string name = "fifo_scoreboard",
+                 uvm_component parent = null);
+        super.new(name, parent);
     endfunction
 
+    function void build_phase(uvm_phase phase);
+        super.build_phase(phase);
+        analysis_export = new("analysis_export", this);
+    endfunction
 
     
-    task run();
 
-        fifo_transaction #(DATA_WIDTH) trans;
 
-        logic expected_empty;
-        logic expected_full;
+function void write(fifo_transaction tx);
 
-        forever begin
+    bit expected_full;
+    bit expected_empty;
+    bit accepted_write;
+    bit accepted_read;
 
-            mon2scb.get(trans);
+    // Wait until the first reset edge has been modeled
+    if (!reset_seen) begin
 
-            // Reset refernce model when DUT is in reset
-            if (!trans.rst_n) begin
-                reference_queue.delete();
-                read_pending = 1'b0;
-
-                continue;
-            end
-
-            // Determine expected FIFO status from reference model
-            expected_empty = (reference_queue.size() === 0);
-            expected_full = (reference_queue.size() === DEPTH);
-
-            // Check DUT empty flag
-            if (trans.empty === expected_empty) begin
-                passed++;
-            end
-            else begin
-
-                $error(
-                    "FAIL: EMPTY mismatch. Expected = %0b, Actual = %0b",
-                    expected_empty,
-                    trans.empty
-                );
-
-                failed++;
-            end
-
-            // Check DUT full flag
-            if (trans.full === expected_full) begin
-                passed++;
-            end
-            else begin
-
-                $error(
-                    "FAIL: FULL mismatch. Expected = %0b, Actual = %0b",
-                    expected_full,
-                    trans.full
-                );
-
-                failed++;
-            end
-            
-
-            if (read_pending) begin
-                if (trans.rd_data === expected_rd_data) begin
-                    $display(
-                        "PASS: Read data = %h",
-                        trans.rd_data
-                    );
-                    passed ++;
-                end
-                else begin
-                    $error(
-                        "FAIL: Expected read data = %h, Actual = %h",
-                        expected_rd_data,
-                        trans.rd_data
-                    );
-                    failed ++;
-                end
-                read_pending = 1'b0;
-            end
-            
-            // Read is enabled and FIFO is not empty
-            if (trans.rd_en && !expected_empty) begin
-                expected_rd_data = reference_queue.pop_front();
-                read_pending = 1'b1;
-            end
-
-            // Write is enabled and FIFO is not full
-            if (trans.wr_en && !expected_full) begin
-                reference_queue.push_back(trans.data);
-
-            end
+        if (!tx.rst_n) begin
+            expected_queue.delete();
+            expected_rd_data = '0;
+            rd_data_valid = 1;
+            reset_seen = 1;
         end
 
-    endtask
+        return;
+    end
 
+    // Calculate expected FIFO flags before this clock edge
+    expected_empty = (expected_queue.size() == 0);
+    expected_full  = (expected_queue.size() == 16);
 
+    // Check EMPTY flag
+    if (tx.empty !== expected_empty) begin
+        `uvm_error("FIFO_SB",
+            $sformatf("EMPTY mismatch: expected=%0b actual=%0b",
+                      expected_empty, tx.empty))
+        tests_failed++;
+    end
+    else
+        tests_passed++;
 
-    function void report();
+    // Check FULL flag
+    if (tx.full !== expected_full) begin
+        `uvm_error("FIFO_SB",
+            $sformatf("FULL mismatch: expected=%0b actual=%0b",
+                      expected_full, tx.full))
+        tests_failed++;
+    end
+    else
+        tests_passed++;
 
-        $display("========================================");
-        $display("FIFO VERIFICATION TEST SUMMARY");
-        $display("Passed checks : %0d", passed);
-        $display("Failed checks : %0d", failed);
-
-        if (failed == 0)
-            $display("RESULT        : PASS");
+    // Check read data against the previous cycle's result
+    if (rd_data_valid) begin
+        if (tx.rd_data !== expected_rd_data) begin
+            `uvm_error("FIFO_SB",
+                $sformatf("Read data mismatch: expected=%h actual=%h",
+                          expected_rd_data, tx.rd_data))
+            tests_failed++;
+        end
         else
-            $display("RESULT        : FAIL");
+            tests_passed++;
+    end
 
-        $display("========================================");
+    // Model synchronous reset at this clock edge
+    if (!tx.rst_n) begin
+        expected_queue.delete();
+        expected_rd_data = '0;
+        rd_data_valid = 1;
+        return;
+    end
 
-    endfunction
+    // Determine accepted operations using pre-edge flags
+    accepted_write = tx.wr_en && !expected_full;
+    accepted_read  = tx.rd_en && !expected_empty;
+
+    // Transaction statistics
+    if (accepted_write)
+        write_count++;
+
+    if (accepted_read)
+        read_count++;
+
+    if (tx.wr_en && tx.rd_en)
+        simultaneous_count++;
+
+    if (expected_full)
+        full_count++;
+
+    if (expected_empty)
+        empty_count++;
+
+    // Update reference model
+    // Read first so simultaneous operations use old data
+    if (accepted_read)
+        expected_rd_data = expected_queue.pop_front();
+
+    if (accepted_write)
+        expected_queue.push_back(tx.wr_data);
+
+    rd_data_valid = 1;
+
+endfunction
+
+
+function void report_phase(uvm_phase phase);
+    super.report_phase(phase);
+
+    // Display scoreboard results
+    `uvm_info("FIFO_SB",
+        $sformatf(
+            "Scoreboard Results: PASSED=%0d FAILED=%0d",
+            tests_passed,
+            tests_failed
+        ),
+        UVM_LOW
+    )
+
+    // Display FIFO transaction statistics
+    `uvm_info("FIFO_STATS",
+        $sformatf(
+            "Writes=%0d Reads=%0d Simultaneous=%0d FullCycles=%0d EmptyCycles=%0d",
+            write_count,
+            read_count,
+            simultaneous_count,
+            full_count,
+            empty_count
+        ),
+        UVM_LOW
+    )
+
+    // Ensure the scoreboard actually performed checks
+    if (tests_passed == 0)
+        `uvm_error("FIFO_SB", "No scoreboard checks executed!")
+
+    // Report verification failure
+    if (tests_failed > 0)
+        `uvm_error("FIFO_SB", "FIFO verification failed!")
+
+endfunction
+
 
 endclass

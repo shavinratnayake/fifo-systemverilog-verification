@@ -1,16 +1,17 @@
-class fifo_transaction #(
-    parameter int DATA_WIDTH = 8
-);
+class fifo_transaction extends uvm_sequence_item;
 
-// Stimulus
-rand logic  wr_en;
-rand logic  rd_en;
-rand logic [DATA_WIDTH-1:0] data;
+    rand bit wr_en;
+    rand bit rd_en;
+    rand bit [7:0] wr_data;
+    bit rst_n;
+    bit [7:0] rd_data;
+    bit full;
+    bit empty;
 
-// DUT Observations
-logic rst_n;
-logic [DATA_WIDTH-1:0] rd_data;
-logic full;
-logic empty;
+    `uvm_object_utils(fifo_transaction)
+
+    function new(string name = "fifo_transaction");
+        super.new(name);
+    endfunction
 
 endclass
