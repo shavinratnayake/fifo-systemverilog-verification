@@ -92,7 +92,6 @@ Functional coverage reached 85.71% across the defined coverage model.
 - A reference-model scoreboard checks expected behavior against DUT activity.
 - Five assertions provide additional FIFO control checks.
 - Functional and cross coverage are collected during simulation.
-- Constrained-random testing is planned but was not executed in the reported run.
 
 ## Tools
 
