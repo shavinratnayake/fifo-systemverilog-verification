@@ -35,7 +35,7 @@ A SystemVerilog UVM verification environment for an 8-bit, 16-entry synchronous 
 | SVA properties | 5 |
 | Reported assertion violations | 0 |
 
-Results are from the directed UVM simulation. Functional coverage reflects the currently defined coverage model, not exhaustive verification.
+Results are from the directed UVM simulation. Functional coverage reflects the currently defined coverage model.
 
 ## Tools
 
