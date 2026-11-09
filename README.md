@@ -4,7 +4,7 @@
 
 This project implements and verifies an 8-bit, 16-entry synchronous FIFO using SystemVerilog and the Universal Verification Methodology (UVM).
 
-The testbench uses directed UVM sequences, a self-checking reference-model scoreboard, SystemVerilog Assertions (SVA), and functional coverage to verify FIFO data integrity and control behavior.
+The verification environment uses directed UVM sequences, a self-checking reference-model scoreboard, SystemVerilog Assertions (SVA), and functional coverage to verify FIFO data integrity and control behavior.
 
 ## Design
 
